@@ -54,11 +54,13 @@ void loop() {
   if (!packetSize && counter % 30 == 0)
   {
     Heltec.display->drawString(0, 30, "No message");
+    /* For debugging on mqtt:
     LoRa.beginPacket();
     LoRa.print("Lora message WC: ");
     LoRa.print("Waiting for request ");
     LoRa.print(counter);
     LoRa.endPacket();
+    */
     Serial.print("No messages: ");
     Serial.println(counter);
   }
