@@ -12,7 +12,7 @@
 //https://demo-dijiudu.readthedocs.io/en/stable/api-reference/system/log.html
 //esp_log_level_set("*", ESP_LOG_DEBUG);
 
-#include "images.h"
+#include "secrets.h"
 
 #define BAND    868E6  //you can set band here directly,e.g. 868E6,915E6
 String rssi = "RSSI --";
@@ -88,7 +88,7 @@ void setup(void) {
   digitalWrite(led, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  WiFi.begin(wifi_ssid, wifi_password);
   Heltec.display->drawString(0, 20, "Connecting to wifi...");
   Heltec.display->display();
   // Wait for connection
@@ -96,15 +96,15 @@ void setup(void) {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Heltec.display->clear();
-    Heltec.display->drawString(0, 10, ssid);
-    Heltec.display->drawString(0, 20, password);
+    Heltec.display->drawString(0, 10, wifi_ssid);
+    Heltec.display->drawString(0, 20, wifi_password);
     Heltec.display->drawString(0, 40, String(attempt));
     Heltec.display->display();
     attempt += 1;
   }
   Heltec.display->clear();
   Heltec.display->drawString(0, 0, "Connected...");
-  Heltec.display->drawString(0, 10, ssid);
+  Heltec.display->drawString(0, 10, wifi_ssid);
   Heltec.display->drawString(0, 20, WiFi.localIP().toString().c_str());
   Heltec.display->display();
 
