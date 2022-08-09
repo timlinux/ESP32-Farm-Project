@@ -3,6 +3,8 @@
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "heltec.h" 
 #include "images.h"
 #include "EspMQTTClient.h"
@@ -19,6 +21,17 @@ String rssi = "RSSI --";
 String packSize = "--";
 String packet ;
 
+
+#define SENSOR_PIN  13 // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin for temp sensor
+/* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
+#define LED_PIN 12
+#define INTERNAL_LED_PIN 25
+OneWire oneWire(SENSOR_PIN);
+//DallasTemperature DS18B20(&oneWire);
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+float tempC; // temperature in Celsius
+
 /**
  * For MQTT Setup
  */
@@ -34,35 +47,10 @@ EspMQTTClient client(
 
 WebServer server(80);
 
-const int led = 13;
-
 void logo(){
   Heltec.display->clear();
   Heltec.display->drawXbm(0,5,logo_width,logo_height,logo_bits);
   Heltec.display->display();
-}
-
-void handleRoot() {
-  digitalWrite(led, 1);
-  server.send(200, "text/plain", "Last packet received: " + packet);
-  digitalWrite(led, 0);
-}
-
-void handleNotFound() {
-  digitalWrite(led, 1);
-  String message = "File Not Found\n\n";
-  message += "URI: ";
-  message += server.uri();
-  message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
-  message += "\nArguments: ";
-  message += server.args();
-  message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
-  }
-  server.send(404, "text/plain", message);
-  digitalWrite(led, 0);
 }
 
 void setup(void) {
@@ -74,7 +62,7 @@ void setup(void) {
     BAND /*long BAND*/);
   LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
   Heltec.display->init();
-  Heltec.display->flipScreenVertically();  
+  //Heltec.display->flipScreenVertically();  
   Heltec.display->setFont(ArialMT_Plain_10);
   logo();
   delay(1500);
@@ -84,8 +72,7 @@ void setup(void) {
   Heltec.display->drawString(0, 10, "Setting up device...");
   Heltec.display->display();
   delay(1000);
-  pinMode(led, OUTPUT);
-  digitalWrite(led, 0);
+  digitalWrite(INTERNAL_LED_PIN, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifi_ssid, wifi_password);
@@ -140,7 +127,43 @@ void setup(void) {
   client.enableOTA(); // Enable OTA (Over The Air) updates. Password defaults to MQTTPassword. Port is the default OTA port. Can be overridden with enableOTA("password", port).
   client.enableLastWillMessage("TestClient/lastwill", "I am going offline");  // You can activate the retain flag by setting the third parameter to true
 
+  setupHttpServer();
 
+  /* Setup for temperature probe */
+  sensors.begin();    // initialize the temperature sensor
+  pinMode(SENSOR_PIN, INPUT);
+  /* Setup for leds */
+  pinMode(INTERNAL_LED_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  blink();
+}
+
+
+void handleRoot() {
+  server.send(200, "text/plain", "Last packet received: " + packet);
+  
+  blink();
+}
+
+void handleNotFound() {
+  digitalWrite(INTERNAL_LED_PIN, 1);
+  String message = "File Not Found\n\n";
+  message += "URI: ";
+  message += server.uri();
+  message += "\nMethod: ";
+  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += "\nArguments: ";
+  message += server.args();
+  message += "\n";
+  for (uint8_t i = 0; i < server.args(); i++) {
+    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  }
+  server.send(404, "text/plain", message);
+}
+
+
+void setupHttpServer() {
+  
   // HTTP Server end points
   server.on("/", handleRoot);
 
@@ -153,14 +176,6 @@ void setup(void) {
   server.begin();
   Serial.println("HTTP server started");
 
-  /* Setup callback, Dont use if handling packets in main loop rather
-
-    Currently causes a segfault if we do it this way....
-  
-  */
-  //LoRa.onReceive(loraCallback);
-  //Heltec.LoRa.receive();
-
 }
 
 void loop(void) {
@@ -172,6 +187,15 @@ void loop(void) {
   delay(10);
   // For MQTT client
   client.loop();
+}
+
+void blink()
+{
+  digitalWrite(LED_PIN, HIGH);
+  digitalWrite(INTERNAL_LED_PIN, HIGH);
+  delay(10);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(INTERNAL_LED_PIN, LOW);
 }
 
 void loraDataReceived(){
@@ -221,8 +245,10 @@ void onConnectionEstablished()
       Heltec.display->drawString(0, 20, "... received");
       Heltec.display->drawString(0, 30, "Sending GETSTATUS");
       Heltec.display->drawString(0, 40, "over LoRA");
-      Heltec.display->display();    
-      client.publish("esp32", "Processing get status request.");
+      Heltec.display->display();   
+      // Uncomment for debugging 
+      // client.publish("esp32", "Processing get status request.");
+      
       // First we send out a broadcast asking 
       // the remote lora device for its status
       // put the radio in idle mode first.
@@ -231,8 +257,31 @@ void onConnectionEstablished()
       LoRa.endPacket();
       // In the main loop we will listen for a 
       // message with STATUS= in it and pass that over to MQTT
+      blink();      
   });
   
+  client.subscribe("esp32/getTemperature",[](const String & topic, const String & payload) {
+      Heltec.display->clear();
+      Heltec.display->drawString(0, 0, "MQTT:" );
+      Heltec.display->drawString(0, 10, "esp32/getTemperature");
+      Heltec.display->drawString(0, 20, "... received");
+      Heltec.display->display();    
+      sensors.requestTemperatures();       // send the command to get temperatures
+      tempC = sensors.getTempCByIndex(0);  // read temperature i
+      client.publish("esp32/temperature", String(tempC));
+      
+      Heltec.display->clear();
+      Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
+      Heltec.display->setFont(ArialMT_Plain_10);
+      Heltec.display->drawString(0, 10 , "Temperature ");
+      Heltec.display->drawString(0, 30, String(tempC) + "°C");  
+      Heltec.display->display();
+      
+      Serial.print("Temperature: ");
+      Serial.print(tempC);    // print the temperature in °C
+      Serial.println("°C");      
+      blink();      
+  });  
 
   // Subscribe to "mytopic/#" and display received message to Serial
   client.subscribe("esp32/wildcard/#", [](const String & topic, const String & payload) {
@@ -241,6 +290,7 @@ void onConnectionEstablished()
       Heltec.display->drawString(0, 10, topic);
       Heltec.display->drawString(0, 20, payload);
       Heltec.display->display();
+      blink();
   });
 
   // 

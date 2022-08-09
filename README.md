@@ -11,6 +11,8 @@ Goal for round #1
 * [EspMQTTClient](https://github.com/plapointe6/EspMQTTClient) - used for pushing status updates to MQTT and Node Red. Also used to send instructions to the ESP32 devices via the gateway receiver device which is both on WIFI and the LoRa network.
 * [PubSubClient](https://pubsubclient.knolleary.net/) - a dependency of the EspMQTTClient library.
 * [Heltec_ESP32](https://github.com/HelTecAutomation/Heltec_ESP32) - used to control the ESP32 boards I use (see hardware below).
+* [OneWire](https://www.pjrc.com/teensy/td_libs_OneWire.html) - For temperature sensor
+* [Dallas](https://github.com/milesburton/Arduino-Temperature-Control-Library) - For temperature sensor
 
 ## Hardware used:
 
