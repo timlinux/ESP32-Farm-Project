@@ -130,9 +130,11 @@ void setup(void) {
   setupHttpServer();
 
   /* Setup for temperature probe */
-  sensors.begin();    // initialize the temperature sensor
   pinMode(SENSOR_PIN, INPUT);
+  sensors.begin();    // initialize the temperature sensor
+  delay (1000);
   /* Setup for leds */
+  /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
   pinMode(INTERNAL_LED_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   blink();
@@ -187,6 +189,12 @@ void loop(void) {
   delay(10);
   // For MQTT client
   client.loop();
+  int touchValue = touchRead(2);
+  if (touchValue < 105 && touchValue > 100)
+  {
+    client.publish("esp32/touchValue", String(touchValue));
+    blink();
+  }
 }
 
 void blink()
