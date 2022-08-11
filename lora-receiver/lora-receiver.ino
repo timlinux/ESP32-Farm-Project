@@ -3,8 +3,6 @@
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
 #include "heltec.h" 
 #include "images.h"
 #include "EspMQTTClient.h"
@@ -21,16 +19,9 @@ String rssi = "RSSI --";
 String packSize = "--";
 String packet ;
 
-
-#define SENSOR_PIN  13 // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin for temp sensor
 /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
 #define LED_PIN 12
 #define INTERNAL_LED_PIN 25
-OneWire oneWire(SENSOR_PIN);
-//DallasTemperature DS18B20(&oneWire);
-// Pass our oneWire reference to Dallas Temperature sensor 
-DallasTemperature sensors(&oneWire);
-float tempC; // temperature in Celsius
 
 /**
  * For MQTT Setup
@@ -129,9 +120,6 @@ void setup(void) {
 
   setupHttpServer();
 
-  /* Setup for temperature probe */
-  pinMode(SENSOR_PIN, INPUT);
-  sensors.begin();    // initialize the temperature sensor
   delay (1000);
   /* Setup for leds */
   /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
@@ -189,12 +177,14 @@ void loop(void) {
   delay(10);
   // For MQTT client
   client.loop();
+  /*
   int touchValue = touchRead(2);
-  if (touchValue < 105 && touchValue > 100)
+  if (touchValue > 104)
   {
     client.publish("esp32/touchValue", String(touchValue));
     blink();
   }
+  */
 }
 
 void blink()
@@ -210,12 +200,43 @@ void loraDataReceived(){
   Heltec.display->clear();
   Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
   Heltec.display->setFont(ArialMT_Plain_10);
-  Heltec.display->drawString(0 , 15 , "Received "+ packSize + " bytes");
-  Heltec.display->drawStringMaxWidth(0 , 26 , 128, packet);
-  Heltec.display->drawString(0, 0, rssi);  
+  Heltec.display->drawString(0 , 10 , "Received "+ packSize + " bytes");
+  Heltec.display->drawStringMaxWidth(0 , 20 , 128, packet);
+  Heltec.display->drawString(0, 30, rssi);    
+  if (packet.indexOf("TEMP=") > 0) {
+    packet.replace("TEMP=", "");
+    Heltec.display->drawString(0, 40, packet);  
+    Heltec.display->drawString(0, 50, "Tempii");  
+
+    // Also publish the received message on MQTT
+    // You can activate the retain flag by setting the 
+    // third parameter to true      
+    client.publish("esp32/temperature", packet); 
+    delay(1000);
+  }
+  else if (packet.indexOf("STATUS=") > 0) {
+    packet.replace("STATUS=", "");
+    Heltec.display->drawString(0, 40, packet);  
+    Heltec.display->drawString(0, 50, "Status");      
+    // Also publish the received message on MQTT
+    // You can activate the retain flag by setting the 
+    // third parameter to true  
+    client.publish("esp32/status", packet); 
+    delay(1000);
+  }
+  else {
+    // Also publish the received message on MQTT
+    // You can activate the retain flag by setting the 
+    // third parameter to true  
+    Heltec.display->drawString(0, 40, packet);  
+    Heltec.display->drawString(0, 50, "Other");      
+    client.publish("esp32", packet); 
+    delay(1000);
+  }
+
   Heltec.display->display();
-  // Also publish the received message on MQTT
-  client.publish("esp32", packet); // You can activate the retain flag by setting the third parameter to true  
+  
+ 
 }
 
 void loraCallback(int packetSize) {
@@ -274,21 +295,19 @@ void onConnectionEstablished()
       Heltec.display->drawString(0, 10, "esp32/getTemperature");
       Heltec.display->drawString(0, 20, "... received");
       Heltec.display->display();    
-      sensors.requestTemperatures();       // send the command to get temperatures
-      tempC = sensors.getTempCByIndex(0);  // read temperature i
-      client.publish("esp32/temperature", String(tempC));
       
-      Heltec.display->clear();
-      Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-      Heltec.display->setFont(ArialMT_Plain_10);
-      Heltec.display->drawString(0, 10 , "Temperature ");
-      Heltec.display->drawString(0, 30, String(tempC) + "°C");  
-      Heltec.display->display();
+      // First we send out a broadcast asking 
+      // the remote lora device for its status
+      // put the radio in idle mode first.
+      LoRa.beginPacket();
+      LoRa.print("GETTEMP");
+      LoRa.endPacket();
       
-      Serial.print("Temperature: ");
-      Serial.print(tempC);    // print the temperature in °C
-      Serial.println("°C");      
-      blink();      
+      // In the main loop we will listen for a 
+      // message with TEMP= in it and pass that over to MQTT
+      blink();
+      blink();
+   
   });  
 
   // Subscribe to "mytopic/#" and display received message to Serial

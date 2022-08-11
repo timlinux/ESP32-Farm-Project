@@ -1,217 +1,24 @@
 [
     {
-        "id": "2720c9c3986d8e43",
-        "type": "tab",
-        "label": "Flow 1",
-        "disabled": false,
-        "info": "",
-        "env": []
-    },
-    {
-        "id": "37f61bdbfe6f7fe8",
-        "type": "mqtt in",
+        "id": "a1e0b98575deac8b",
+        "type": "ui_widget_thermometer",
         "z": "2720c9c3986d8e43",
-        "name": "esp32",
-        "topic": "esp32",
-        "qos": "2",
-        "datatype": "auto-detect",
-        "broker": "ae0281d5a95f7511",
-        "nl": false,
-        "rap": true,
-        "rh": 0,
-        "inputs": 0,
-        "x": 290,
-        "y": 240,
-        "wires": [
-            [
-                "4034255818a7127c"
-            ]
-        ]
-    },
-    {
-        "id": "7bbe468e2c798e12",
-        "type": "mqtt out",
-        "z": "2720c9c3986d8e43",
-        "name": "esp32/getValveStatus",
-        "topic": "esp32/getValveStatus",
-        "qos": "",
-        "retain": "",
-        "respTopic": "",
-        "contentType": "",
-        "userProps": "",
-        "correl": "",
-        "expiry": "",
-        "broker": "ae0281d5a95f7511",
-        "x": 580,
-        "y": 80,
+        "group": "d513e413229d2d64",
+        "order": 4,
+        "width": 6,
+        "height": 5,
+        "name": "Temperature",
+        "title": "Temperature",
+        "colorTop": "#2196f3",
+        "colorMiddle": "#8bc34a",
+        "colorBottom": "#f44336",
+        "unit": "°C",
+        "scale": "normal",
+        "minTemp": "-5",
+        "maxTemp": "50",
+        "x": 1050,
+        "y": 400,
         "wires": []
-    },
-    {
-        "id": "cbf5243f8228740a",
-        "type": "inject",
-        "z": "2720c9c3986d8e43",
-        "name": "GETSTATUS",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "",
-        "payloadType": "date",
-        "x": 310,
-        "y": 100,
-        "wires": [
-            [
-                "7bbe468e2c798e12"
-            ]
-        ]
-    },
-    {
-        "id": "d80767782fd6db3f",
-        "type": "ui_text",
-        "z": "2720c9c3986d8e43",
-        "group": "d513e413229d2d64",
-        "order": 1,
-        "width": 26,
-        "height": 10,
-        "name": "ESP32 Messages",
-        "label": "Messages",
-        "format": "{{msg.payload}}",
-        "layout": "col-center",
-        "className": "",
-        "x": 890,
-        "y": 340,
-        "wires": []
-    },
-    {
-        "id": "f439b6e158f16755",
-        "type": "ui_button",
-        "z": "2720c9c3986d8e43",
-        "name": "",
-        "group": "d513e413229d2d64",
-        "order": 2,
-        "width": 0,
-        "height": 0,
-        "passthru": false,
-        "label": "Get Status",
-        "tooltip": "",
-        "color": "",
-        "bgcolor": "",
-        "className": "",
-        "icon": "",
-        "payload": "",
-        "payloadType": "str",
-        "topic": "topic",
-        "topicType": "msg",
-        "x": 310,
-        "y": 40,
-        "wires": [
-            [
-                "7bbe468e2c798e12"
-            ]
-        ]
-    },
-    {
-        "id": "4034255818a7127c",
-        "type": "function",
-        "z": "2720c9c3986d8e43",
-        "name": "function 1",
-        "func": "var log = global.get(\"log\");\nlog = msg.payload + \"<br />\" + log\nglobal.set(\"log\", log);\nmsg.payload = log;\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 580,
-        "y": 240,
-        "wires": [
-            [
-                "d80767782fd6db3f"
-            ]
-        ]
-    },
-    {
-        "id": "9f009a5b425ce042",
-        "type": "ui_button",
-        "z": "2720c9c3986d8e43",
-        "name": "",
-        "group": "d513e413229d2d64",
-        "order": 2,
-        "width": 0,
-        "height": 0,
-        "passthru": false,
-        "label": "Clear Logs",
-        "tooltip": "",
-        "color": "",
-        "bgcolor": "",
-        "className": "",
-        "icon": "",
-        "payload": "",
-        "payloadType": "str",
-        "topic": "topic",
-        "topicType": "msg",
-        "x": 310,
-        "y": 420,
-        "wires": [
-            [
-                "cbcfa8e43586d5d6"
-            ]
-        ]
-    },
-    {
-        "id": "cbcfa8e43586d5d6",
-        "type": "function",
-        "z": "2720c9c3986d8e43",
-        "name": "function 2",
-        "func": "global.set(\"log\", \"\");\nreturn msg;",
-        "outputs": 1,
-        "noerr": 0,
-        "initialize": "",
-        "finalize": "",
-        "libs": [],
-        "x": 580,
-        "y": 420,
-        "wires": [
-            [
-                "d80767782fd6db3f"
-            ]
-        ]
-    },
-    {
-        "id": "ae0281d5a95f7511",
-        "type": "mqtt-broker",
-        "name": "Desktop PC",
-        "broker": "192.168.0.106",
-        "port": "1883",
-        "clientid": "nodered",
-        "autoConnect": true,
-        "usetls": false,
-        "protocolVersion": "4",
-        "keepalive": "60",
-        "cleansession": true,
-        "birthTopic": "NodeRed",
-        "birthQos": "0",
-        "birthPayload": "connected",
-        "birthMsg": {},
-        "closeTopic": "NodeRed",
-        "closeQos": "0",
-        "closePayload": "disconnected",
-        "closeMsg": {},
-        "willTopic": "NodeRed",
-        "willQos": "0",
-        "willPayload": "unexpected disconnect",
-        "willMsg": {},
-        "userProps": "",
-        "sessionExpiry": ""
     },
     {
         "id": "d513e413229d2d64",
