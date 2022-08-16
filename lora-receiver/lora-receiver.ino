@@ -16,6 +16,7 @@
 #include "secrets.h"
 
 // Interrupts setup
+// See https://www.visualmicro.com/page/Timer-Interrupts-Explained.aspx for logic of interrupt handlers
 volatile int interrupts;
 int totalInterrupts;
 int lastInterrupt;
