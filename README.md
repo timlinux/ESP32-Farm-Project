@@ -28,8 +28,6 @@ You need two (or more) ESP32 devices. One is to act as the Gateway receiver, the
 Open each sketch in the Arduino IDE and flash the code to each.
 
 
-* Setup MQTT https://www.vultr.com/pt/docs/install-mosquitto-mqtt-broker-on-ubuntu-20-04-server/
-* Disable MQTT on local only mode: https://techoverflow.net/2021/11/25/how-to-fix-mosquitto-mqtt-local-only-mode-and-listen-on-all-ip-addresses/
 * Setup NodeRed (using docker) https://nodered.org/docs/getting-started/docker
 * Install NodeRed dashboard node-red-dashboard
 * Install [NodeRed flow](nodered/flows.json) - make sure to configure passwords etc for your MQTT broker.
@@ -38,10 +36,96 @@ Open each sketch in the Arduino IDE and flash the code to each.
 
 To go with the project I set up a small, lower power NUC device with Ubuntu Linux Server minimal install and installed the following:
 
-* Adguard Home - ``sudo snap install adguard-home`` and [how to resolve bind in use](https://github.com/AdguardTeam/AdGuardHome/wiki/FAQ#bindinuse). After installing, the setup page is at http://host:3000
-* Mosquitto MQTT server - done during the server setup
-* PostgreSQL 10 - done during the server setup. The version is old but that is fine for my needs.
-* Tailscale - I created a VPN between my machines so I can look at my home node-red dashboards without publishing them online
+## Adguard Home 
+
+``sudo snap install adguard-home`` and [how to resolve bind in use](https://github.com/AdguardTeam/AdGuardHome/wiki/FAQ#bindinuse). After installing, the setup page is at http://host:3000
+
+## Tailscale 
+
+I created a VPN between my machines so I can look at my home node-red dashboards without publishing them online. Just go to the tailscale website and follow their very clear setup processes.
+
+
+## Mosquitto MQTT server
+
+```
+sudo apt install mosquitto mosquitto-clients
+```
+
+Summary of process:
+
+* Setup MQTT authentigation as per [this tutorial](https://www.vultr.com/pt/docs/install-mosquitto-mqtt-broker-on-ubuntu-20-04-server/)
+* Disable MQTT on local only mode as per [this tutorial](https://techoverflow.net/2021/11/25/how-to-fix-mosquitto-mqtt-local-only-mode-and-listen-on-all-ip-addresses/)
+
+These steps do all from above tutorials:
+
+/etc/mosquitto/mosquitto.conf :
+
+```
+#Place your local configuration in /etc/mosquitto/conf.d/
+#
+# A full description of the configuration file is at
+# /usr/share/doc/mosquitto/examples/mosquitto.conf.example
+
+# Added by Tim to listen on public port too
+bind_address 0.0.0.0
+
+pid_file /run/mosquitto/mosquitto.pid
+
+persistence true
+persistence_location /var/lib/mosquitto/
+
+log_dest file /var/log/mosquitto/mosquitto.log
+
+include_dir /etc/mosquitto/conf.d
+
+```
+
+/etc/mosquitto/conf.d/default.conf
+
+
+```
+allow_anonymous false
+password_file /etc/mosquitto/passwd
+```
+
+
+```
+sudo vim /etc/mosquitto/passwd
+```
+
+Create a user:password entry with a strong password. Then do
+
+```
+sudo mosquitto_passwd -U /etc/mosquitto/passw
+```
+
+Restart mosquitto
+
+```
+sudo systemctl mosquitto restart
+```
+
+Test client in Terminal 1:
+
+```
+mosquitto_sub -u tim -P "XXXXXXXXXXXXXXXXXXXX" -h localhost -t 'esp32/example' -v
+```
+
+Test server in Terminal 2:
+
+```
+mosquitto_pub -u tim -P "XXXXXXXXXXXXXXXXXXXX" -h localhost -t 'esp32/example' -v -m "hello"
+```
+
+
+
+## PostgreSQL 10
+
+
+sudo apt install postgresql-14-postgis-3
+
+
+
 
 
 
