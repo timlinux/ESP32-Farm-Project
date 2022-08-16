@@ -34,6 +34,15 @@ Open each sketch in the Arduino IDE and flash the code to each.
 * Install NodeRed dashboard node-red-dashboard
 * Install [NodeRed flow](nodered/flows.json) - make sure to configure passwords etc for your MQTT broker.
 
+# Home Server Setup
+
+To go with the project I set up a small, lower power NUC device with Ubuntu Linux Server minimal install and installed the following:
+
+* Adguard Home - ``sudo snap install adguard-home`` and [how to resolve bind in use](https://github.com/AdguardTeam/AdGuardHome/wiki/FAQ#bindinuse). After installing, the setup page is at http://host:3000
+* Mosquitto MQTT server - done during the server setup
+* PostgreSQL 10 - done during the server setup. The version is old but that is fine for my needs.
+* Tailscale - I created a VPN between my machines so I can look at my home node-red dashboards without publishing them online
+
 
 
 -----
