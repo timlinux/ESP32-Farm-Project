@@ -11,17 +11,43 @@
 #include "esp_log.h"
 //https://demo-dijiudu.readthedocs.io/en/stable/api-reference/system/log.html
 //esp_log_level_set("*", ESP_LOG_DEBUG);
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "secrets.h"
 
+// Interrupts setup
+volatile int interrupts;
+int totalInterrupts;
+int lastInterrupt;
+
+hw_timer_t * timer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+// Interrupt callback
+void IRAM_ATTR onTime() {
+  portENTER_CRITICAL_ISR(&timerMux);
+  interrupts++;
+  
+  
+  portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+// Lora setup
 #define BAND    868E6  //you can set band here directly,e.g. 868E6,915E6
 String rssi = "RSSI --";
 String packSize = "--";
 String packet ;
 
 /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
+#define SENSOR_PIN  21 // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin for temp sensor
 #define LED_PIN 12
 #define INTERNAL_LED_PIN 25
+
+OneWire oneWire(SENSOR_PIN);
+//DallasTemperature DS18B20(&oneWire);
+// Pass our oneWire reference to Dallas Temperature sensor 
+DallasTemperature sensors(&oneWire);
+float tempC; // temperature in Celsius
 
 /**
  * For MQTT Setup
@@ -45,6 +71,18 @@ void logo(){
 }
 
 void setup(void) {
+
+  /* Interrupts setup - we will measure temp every minute **/
+  // Configure Prescaler to 80, as our timer runs @ 80Mhz
+  // Giving an output of 80,000,000 / 80 = 1,000,000 ticks / second
+  timer = timerBegin(0, 80, true);                
+  timerAttachInterrupt(timer, &onTime, true);    
+  // Fire Interrupt every 60m ticks, so 60s
+  timerAlarmWrite(timer, 60000000, true);      
+  timerAlarmEnable(timer);
+  lastInterrupt = 0;
+
+  // LoRa setup
   Heltec.begin(
     true /*DisplayEnable Enable*/, 
     true /*Heltec.Heltec.Heltec.LoRa Disable*/, 
@@ -63,6 +101,7 @@ void setup(void) {
   Heltec.display->drawString(0, 10, "Setting up device...");
   Heltec.display->display();
   delay(1000);
+  
   digitalWrite(INTERNAL_LED_PIN, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
@@ -121,6 +160,9 @@ void setup(void) {
   setupHttpServer();
 
   delay (1000);
+  /* Setup for temperature probe */
+  pinMode(SENSOR_PIN, INPUT);
+  sensors.begin();    // initialize the temperature sensor  
   /* Setup for leds */
   /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
   pinMode(INTERNAL_LED_PIN, OUTPUT);
@@ -128,6 +170,35 @@ void setup(void) {
   blink();
 }
 
+void readTemperature() {
+
+ 
+      Heltec.display->clear();
+      Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
+      Heltec.display->setFont(ArialMT_Plain_10);
+      Heltec.display->drawString(0, 30, "GETTEMP Found");
+
+      Serial.println("Reading temperature");
+
+      sensors.requestTemperatures();       // send the command to get temperatures
+      tempC = sensors.getTempCByIndex(0);  // read temperature i
+
+      Serial.print("Temperature: ");
+      Serial.print(tempC);    // print the temperature in °C
+      Serial.println("°C");  
+
+      Serial.println("Sending temp message via LoRa");
+      
+      LoRa.beginPacket();
+      LoRa.print("INSIDETEMP=");
+      LoRa.print(tempC);
+      LoRa.endPacket();
+      
+      Heltec.display->drawString(0, 30 , "Temperature ");
+      Heltec.display->drawString(0, 40, String(tempC) + "°C");  
+      Heltec.display->display();
+  
+}
 
 void handleRoot() {
   server.send(200, "text/plain", "Last packet received: " + packet);
@@ -169,6 +240,23 @@ void setupHttpServer() {
 }
 
 void loop(void) {
+
+  if (interrupts > 0) {
+    portENTER_CRITICAL(&timerMux);
+    interrupts--;
+    portEXIT_CRITICAL(&timerMux);
+    totalInterrupts++;
+    Serial.print("totalInterrupts");
+    Serial.println(totalInterrupts);
+  }
+
+  if (lastInterrupt < totalInterrupts) {
+    readTemperature();
+    totalInterrupts = interrupts;
+  }
+
+
+  
   // For web server
   server.handleClient();
   // For lora receiver not needed if using callback 
