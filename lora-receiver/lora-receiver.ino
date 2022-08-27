@@ -1,9 +1,8 @@
-#include <dummy.h>             // Check if still used
 #include "heltec.h"            // Board specific library for our ESP32 Device
 // I think we can get rid of this
 // as I think it was part of the implementation I was 
 // trying to do for wireguard
-#include <ESPmDNS.h>           // To resolve hostnames via DNS - check if used
+//#include <ESPmDNS.h>           // To resolve hostnames via DNS - check if used
 #include <OneWire.h>           // For temp sensor
 #include <DallasTemperature.h> // For temp sensor
 #include <WebServer.h>         // Implements a simple HTTP Server
@@ -11,8 +10,8 @@
 #include <WiFi.h>              // For connecting to the local WIFI network
 #include <WiFiClient.h>        // For connecting to the local WIFI network
 #include "esp_log.h"           // Check if still used
-#include "splash.xbm"          // For displaying a logo on start - edit in GIMP if needed
 #include "secrets.h"           // All passwords etc. should be stored here
+#include "splash.h"          // For displaying a logo on start - edit in GIMP if needed
 
 /*
  Interrupt handlers setup

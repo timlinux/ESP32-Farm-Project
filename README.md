@@ -155,6 +155,12 @@ mosquitto_pub -u tim -P "XXXXXXXXXXXXXXXXXXXX" -h localhost -t 'esp32/example' -
 sudo apt install postgresql-14-postgis-3
 
 
+## Arduino setup
+
+Basically follow notes to your board setup - in my case https://heltec-automation-docs.readthedocs.io/en/latest/esp32/quick_start.html
+
+Then install all the libraries needed - usually you can just search for the library after you get a compile error.
+
 
 
 
