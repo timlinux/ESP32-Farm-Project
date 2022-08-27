@@ -44,6 +44,36 @@ To go with the project I set up a small, lower power NUC device with Ubuntu Linu
 
 I created a VPN between my machines so I can look at my home node-red dashboards without publishing them online. Just go to the tailscale website and follow their very clear setup processes.
 
+## Node-Red
+
+> Do not use the snap package, fonts are broken for the graph-image node.
+
+sudo apt install npm
+sudo npm cache clean -f
+sudo npm install -g n
+sudo n stable
+
+(Above steps from https://askubuntu.com/a/480642)
+
+To start run:
+
+> node-red
+
+Then install these nodes:
+
+node-red-dashboard
+@studiobox/node-red-contrib-ui-widget-thermometer
+node-red-contrib-chart-image
+node-red-contrib-ui-media
+node-red-contrib-telegrambot
+
+
+For charts to render I had to install these:
+
+> sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+> npm install canvas
+
+See https://discourse.nodered.org/t/solved-using-node-red-contrib-chart-image/35300/7
 
 ## Mosquitto MQTT server
 
@@ -119,7 +149,7 @@ mosquitto_pub -u tim -P "XXXXXXXXXXXXXXXXXXXX" -h localhost -t 'esp32/example' -
 
 
 
-## PostgreSQL 10
+## PostgreSQL
 
 
 sudo apt install postgresql-14-postgis-3

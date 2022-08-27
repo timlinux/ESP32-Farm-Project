@@ -1,54 +1,60 @@
-#include <dummy.h>
-#include <WiFi.h>
-#include <WiFiClient.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#include "heltec.h" 
-#include "images.h"
-#include "EspMQTTClient.h"
-//#include <WireGuard.hpp>
-//#include <WireGuard-ESP32.h>
-#include "esp_log.h"
-//https://demo-dijiudu.readthedocs.io/en/stable/api-reference/system/log.html
-//esp_log_level_set("*", ESP_LOG_DEBUG);
-#include <OneWire.h>
-#include <DallasTemperature.h>
-#include "secrets.h"
+#include <dummy.h>             // Check if still used
+#include "heltec.h"            // Board specific library for our ESP32 Device
+#include <ESPmDNS.h>           // To resolve hostnames via DNS - check if used
+#include <OneWire.h>           // For temp sensor
+#include <DallasTemperature.h> // For temp sensor
+#include <WebServer.h>         // Implements a simple HTTP Server
+#include "EspMQTTClient.h"     // For sending and receiving messages over MQTT
+#include <WiFi.h>              // For connecting to the local WIFI network
+#include <WiFiClient.h>        // For connecting to the local WIFI network
+#include "esp_log.h"           // Check if still used
+#include "images.h"            // For displaying a logo on start
+#include "secrets.h"           // All passwords etc. should be stored here
 
-// Interrupts setup
-// See https://www.visualmicro.com/page/Timer-Interrupts-Explained.aspx for logic of interrupt handlers
-volatile int interrupts;
-int totalInterrupts;
-int lastInterrupt;
-
-hw_timer_t * timer = NULL;
+/*
+ Interrupt handlers setup
+ See https://www.visualmicro.com/page/Timer-Interrupts-Explained.aspx 
+ for logic of interrupt handlers
+*/
+volatile int global_current_interrupts;
+int global_total_interrupts;
+int global_last_interrupts;
+hw_timer_t * global_timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // Interrupt callback
-void IRAM_ATTR onTime() {
+void IRAM_ATTR timer_interrupt_handler() {
   portENTER_CRITICAL_ISR(&timerMux);
-  interrupts++;
-  
-  
+  global_current_interrupts++;
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
-// Lora setup
-#define BAND    868E6  //you can set band here directly,e.g. 868E6,915E6
-String rssi = "RSSI --";
-String packSize = "--";
-String packet ;
+/* 
+Lora setup:
+The band you should use is region specific. In europe we need to use
+868E6, but if you are in a different region you will need to research 
+online what the appropriate band code is. 
+*/
+#define BAND    868E6  
+String global_lora_rssi = "RSSI --";
+String global_lora_packet_size = "--";
+String global_lora_packet ;
 
-/* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
-#define SENSOR_PIN  21 // ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin for temp sensor
+/* 
+Read the ESP32 schematics carefully - some GPIO pins are read only so you
+cannot set them to output mode. This can vary from device to device, so read
+the manufacturer specs carefully then use an appropriate pin. 
+
+ESP32 pin GIOP21 connected to DS18B20 sensor's DQ pin for temp sensor.
+*/
+#define SENSOR_PIN  21 
 #define LED_PIN 12
 #define INTERNAL_LED_PIN 25
 
 OneWire oneWire(SENSOR_PIN);
-//DallasTemperature DS18B20(&oneWire);
 // Pass our oneWire reference to Dallas Temperature sensor 
 DallasTemperature sensors(&oneWire);
-float tempC; // temperature in Celsius
+float global_temp_c; // temperature in Celsius
 
 /**
  * For MQTT Setup
@@ -57,13 +63,13 @@ EspMQTTClient client(
   wifi_ssid,
   wifi_password,
   broker_ip, // MQTT Broker server ip
-  broker_user,   // User Can be omitted if not needed
-  broker_password,   // Pass Can be omitted if not needed
-  broker_client_name,      // Client name that uniquely identify your device
-  broker_port
+  broker_user, // User Can be omitted if not needed
+  broker_password, // Pass Can be omitted if not needed
+  broker_client_name, // Client name that uniquely identify your device
+  broker_port // MQTT port to use
 );
 
-WebServer server(80);
+WebServer global_web_server(80);
 
 void logo(){
   Heltec.display->clear();
@@ -76,12 +82,12 @@ void setup(void) {
   /* Interrupts setup - we will measure temp every minute **/
   // Configure Prescaler to 80, as our timer runs @ 80Mhz
   // Giving an output of 80,000,000 / 80 = 1,000,000 ticks / second
-  timer = timerBegin(0, 80, true);                
-  timerAttachInterrupt(timer, &onTime, true);    
+  global_timer = timerBegin(0, 80, true);                
+  timerAttachInterrupt(global_timer, &timer_interrupt_handler, true);    
   // Fire Interrupt every 60m ticks, so 60s
-  timerAlarmWrite(timer, 60000000, true);      
-  timerAlarmEnable(timer);
-  lastInterrupt = 0;
+  timerAlarmWrite(global_timer, 60000000, true);      
+  timerAlarmEnable(global_timer);
+  global_last_interrupts = 0;
 
   // LoRa setup
   Heltec.begin(
@@ -97,7 +103,6 @@ void setup(void) {
   logo();
   delay(1500);
   Heltec.display->clear();
-  
   Heltec.display->drawString(0, 0, "Heltec.LoRa Initial success!");
   Heltec.display->drawString(0, 10, "Setting up device...");
   Heltec.display->display();
@@ -182,27 +187,27 @@ void readTemperature() {
       Serial.println("Reading temperature");
 
       sensors.requestTemperatures();       // send the command to get temperatures
-      tempC = sensors.getTempCByIndex(0);  // read temperature i
+      global_temp_c = sensors.getTempCByIndex(0);  // read temperature i
 
       Serial.print("Temperature: ");
-      Serial.print(tempC);    // print the temperature in °C
+      Serial.print(global_temp_c);    // print the temperature in °C
       Serial.println("°C");  
 
       Serial.println("Sending temp message via LoRa");
       
       LoRa.beginPacket();
       LoRa.print("INSIDETEMP=");
-      LoRa.print(tempC);
+      LoRa.print(global_temp_c);
       LoRa.endPacket();
       
       Heltec.display->drawString(0, 30 , "Temperature ");
-      Heltec.display->drawString(0, 40, String(tempC) + "°C");  
+      Heltec.display->drawString(0, 40, String(global_temp_c) + "°C");  
       Heltec.display->display();
   
 }
 
 void handleRoot() {
-  server.send(200, "text/plain", "Last packet received: " + packet);
+  global_web_server.send(200, "text/plain", "Last packet received: " + global_lora_packet);
   
   blink();
 }
@@ -211,58 +216,61 @@ void handleNotFound() {
   digitalWrite(INTERNAL_LED_PIN, 1);
   String message = "File Not Found\n\n";
   message += "URI: ";
-  message += server.uri();
+  message += global_web_server.uri();
   message += "\nMethod: ";
-  message += (server.method() == HTTP_GET) ? "GET" : "POST";
+  message += (global_web_server.method() == HTTP_GET) ? "GET" : "POST";
   message += "\nArguments: ";
-  message += server.args();
+  message += global_web_server.args();
   message += "\n";
-  for (uint8_t i = 0; i < server.args(); i++) {
-    message += " " + server.argName(i) + ": " + server.arg(i) + "\n";
+  for (uint8_t i = 0; i < global_web_server.args(); i++) {
+    message += " " + global_web_server.argName(i) + ": " + global_web_server.arg(i) + "\n";
   }
-  server.send(404, "text/plain", message);
+  global_web_server.send(404, "text/plain", message);
 }
 
 
 void setupHttpServer() {
   
   // HTTP Server end points
-  server.on("/", handleRoot);
+  global_web_server.on("/", handleRoot);
 
-  server.on("/inline", []() {
-    server.send(200, "text/plain", "this works as well");
+  global_web_server.on("/inline", []() {
+    global_web_server.send(200, "text/plain", "this works as well");
   });
 
-  server.onNotFound(handleNotFound);
+  global_web_server.onNotFound(handleNotFound);
 
-  server.begin();
+  global_web_server.begin();
   Serial.println("HTTP server started");
 
 }
 
 void loop(void) {
 
-  if (interrupts > 0) {
+  if (global_current_interrupts > 0) {
     portENTER_CRITICAL(&timerMux);
-    interrupts--;
+    global_current_interrupts--;
     portEXIT_CRITICAL(&timerMux);
-    totalInterrupts++;
-    Serial.print("totalInterrupts");
-    Serial.println(totalInterrupts);
+    global_total_interrupts++;
+    // TODO: get rid of this, it is just for debugging
+    if (!global_total_interrupts % 1000){
+    	Serial.print("global_total_interrupts");
+    	Serial.println(global_total_interrupts);
+    }
   }
 
-  if (lastInterrupt < totalInterrupts) {
+  if (global_last_interrupts < global_total_interrupts) {
     readTemperature();
-    totalInterrupts = interrupts;
+    global_total_interrupts = global_current_interrupts;
   }
 
 
   
   // For web server
-  server.handleClient();
+  global_web_server.handleClient();
   // For lora receiver not needed if using callback 
-  int packetSize = Heltec.LoRa.parsePacket();
-  if (packetSize) { loraCallback(packetSize);  }
+  int packet_size = Heltec.LoRa.parsePacket();
+  if (packet_size) { loraCallback(packet_size);  }
   delay(10);
   // For MQTT client
   client.loop();
@@ -289,50 +297,50 @@ void loraDataReceived(){
   Heltec.display->clear();
   Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
   Heltec.display->setFont(ArialMT_Plain_10);
-  Heltec.display->drawString(0 , 10 , "Received "+ packSize + " bytes");
-  Heltec.display->drawStringMaxWidth(0 , 20 , 128, packet);
-  Heltec.display->drawString(0, 30, rssi);    
-  if (packet.indexOf("TEMP=") > 0) {
-    packet.replace("TEMP=", "");
-    Heltec.display->drawString(0, 40, packet);  
+  Heltec.display->drawString(0 , 10 , "Received "+ global_lora_packet_size + " bytes");
+  Heltec.display->drawStringMaxWidth(0 , 20 , 128, global_lora_packet);
+  Heltec.display->drawString(0, 30, global_lora_rssi);    
+  if (global_lora_packet.indexOf("TEMP=") > 0) {
+    global_lora_packet.replace("TEMP=", "");
+    Heltec.display->drawString(0, 40, global_lora_packet);  
     Heltec.display->drawString(0, 50, "Tempii");  
 
     // Also publish the received message on MQTT
     // You can activate the retain flag by setting the 
     // third parameter to true      
-    client.publish("esp32/temperature", packet); 
+    client.publish("esp32/temperature", global_lora_packet); 
     delay(1000);
   }
-  else if (packet.indexOf("STATUS=") > 0) {
-    packet.replace("STATUS=", "");
-    Heltec.display->drawString(0, 40, packet);  
+  else if (global_lora_packet.indexOf("STATUS=") > 0) {
+    global_lora_packet.replace("STATUS=", "");
+    Heltec.display->drawString(0, 40, global_lora_packet);  
     Heltec.display->drawString(0, 50, "Status");      
     // Also publish the received message on MQTT
     // You can activate the retain flag by setting the 
     // third parameter to true  
-    client.publish("esp32/status", packet); 
+    client.publish("esp32/status", global_lora_packet); 
     delay(1000);
   }
   else {
     // Also publish the received message on MQTT
     // You can activate the retain flag by setting the 
     // third parameter to true  
-    Heltec.display->drawString(0, 40, packet);  
+    Heltec.display->drawString(0, 40, global_lora_packet);  
     Heltec.display->drawString(0, 50, "Other");      
-    client.publish("esp32", packet); 
+    client.publish("esp32", global_lora_packet); 
     delay(1000);
   }
 
   Heltec.display->display();
-  
- 
 }
 
-void loraCallback(int packetSize) {
-  packet ="";
-  packSize = String(packetSize,DEC);
-  for (int i = 0; i < packetSize; i++) { packet += (char) Heltec.LoRa.read(); }
-  rssi = "RSSI " + String(Heltec.LoRa.packetRssi(), DEC) ;
+void loraCallback(int packet_size) {
+  global_lora_packet ="";
+  global_lora_packet_size = String(packet_size,DEC);
+  for (int i = 0; i < packet_size; i++) { 
+	global_lora_packet += (char) Heltec.LoRa.read(); 
+  }
+  global_lora_rssi = "RSSI " + String(Heltec.LoRa.packetRssi(), DEC) ;
   loraDataReceived();
 }
 
@@ -343,79 +351,67 @@ void onConnectionEstablished()
   Heltec.display->clear();
   Heltec.display->drawString(0, 0, "MQTT...connection established");
   Heltec.display->display();
-  /*
-  // Subscribe to "mytopic/test" and display received message to Serial
-  client.subscribe("esp32/test", [](const String & payload) {
-      Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "MQTT...message received on esp32/test:");
-      Heltec.display->drawString(0, 10, payload);
-      Heltec.display->display();
-  });
-  */
 
-  // Subscribe to "mytopic/geValveStats"
-  // if we get this message, we will send a LoRA packet to the
-  // esp32 device controlling the valve, asking for it's status.
+  /* Subscribe to "esp32/getStatus" on MQTT. If we get this message, we will
+     send a LoRA packet to all esp32 devices asking them to return a message
+     with their status. */
   client.subscribe("esp32/getValveStatus",[](const String & topic, const String & payload) {
       Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "MQTT:" );
-      Heltec.display->drawString(0, 10, "esp32/getValveStatus");
-      Heltec.display->drawString(0, 20, "... received");
-      Heltec.display->drawString(0, 30, "Sending GETSTATUS");
-      Heltec.display->drawString(0, 40, "over LoRA");
+      Heltec.display->drawString(0, 0, "IN:MQTT:esp32/getStatus");
+      Heltec.display->drawString(0, 10, "OUT:LoRA:GETSTATUS");
       Heltec.display->display();   
       // Uncomment for debugging 
       // client.publish("esp32", "Processing get status request.");
       
-      // First we send out a broadcast asking 
-      // the remote lora device for its status
-      // put the radio in idle mode first.
+      // Send out a broadcast asking the remote 
+      // LoRA devices for their status.
       LoRa.beginPacket();
       LoRa.print("GETSTATUS");
       LoRa.endPacket();
-      // In the main loop we will listen for a 
+      // In the main loop we will listen for any response
       // message with STATUS= in it and pass that over to MQTT
       blink();      
   });
   
+  /* Subscribe to "esp32/getTemperature" on MQTT If we get this message, we
+     will send a LoRA packet to all esp32 devices asking them to return a
+     message with their temperature if they are able to do that. */
   client.subscribe("esp32/getTemperature",[](const String & topic, const String & payload) {
       Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "MQTT:" );
-      Heltec.display->drawString(0, 10, "esp32/getTemperature");
-      Heltec.display->drawString(0, 20, "... received");
+      Heltec.display->drawString(0, 0, "IN:MQTT:esp32/getTemperature");
+      Heltec.display->drawString(0, 10, "OUT:LoRA:GETTEMP");
       Heltec.display->display();    
       
-      // First we send out a broadcast asking 
-      // the remote lora device for its status
-      // put the radio in idle mode first.
+      /* First we send out a broadcast asking the remote lora device for its
+         status put the radio in idle mode first. */
       LoRa.beginPacket();
       LoRa.print("GETTEMP");
       LoRa.endPacket();
       
       // In the main loop we will listen for a 
       // message with TEMP= in it and pass that over to MQTT
+      // Two blinks means getTemp
       blink();
       blink();
    
   });  
 
+  // TODO: Decide if we really want wildcard handling here.
   // Subscribe to "mytopic/#" and display received message to Serial
   client.subscribe("esp32/wildcard/#", [](const String & topic, const String & payload) {
       Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "MQTT...message received on wildcard :");
+      Heltec.display->drawString(0, 0, "IN:MQTT:wildcard");
       Heltec.display->drawString(0, 10, topic);
       Heltec.display->drawString(0, 20, payload);
       Heltec.display->display();
+      // Three blinks means wildcard message
+      blink();
+      blink();
       blink();
   });
 
-  // 
-  // Normally you are going to move these to parts of the code that need to publish messages
-  // 
-
-  // Publish a message to "mytopic/test"
-  //client.publish("esp32/test", "This is a message"); // You can activate the retain flag by setting the third parameter to true
-  client.publish("esp32", "ESP Device MQTT setup done"); // You can activate the retain flag by setting the third parameter to true
+  // You can activate the retain flag by setting the third parameter to true
+  client.publish("esp32", "ESP Hub Device Online");
 
   // Execute delayed instructions
   /*
