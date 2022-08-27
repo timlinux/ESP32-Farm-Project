@@ -1,5 +1,8 @@
 #include <dummy.h>             // Check if still used
 #include "heltec.h"            // Board specific library for our ESP32 Device
+// I think we can get rid of this
+// as I think it was part of the implementation I was 
+// trying to do for wireguard
 #include <ESPmDNS.h>           // To resolve hostnames via DNS - check if used
 #include <OneWire.h>           // For temp sensor
 #include <DallasTemperature.h> // For temp sensor
@@ -8,7 +11,7 @@
 #include <WiFi.h>              // For connecting to the local WIFI network
 #include <WiFiClient.h>        // For connecting to the local WIFI network
 #include "esp_log.h"           // Check if still used
-#include "images.h"            // For displaying a logo on start
+#include "splash.xbm"          // For displaying a logo on start - edit in GIMP if needed
 #include "secrets.h"           // All passwords etc. should be stored here
 
 /*
@@ -22,7 +25,11 @@ int global_last_interrupts;
 hw_timer_t * global_timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
-// Interrupt callback
+/*
+  Interrupt callback
+  Don't do any sleep or serial printing in
+  here because it needs to be highly performant.
+*/
 void IRAM_ATTR timer_interrupt_handler() {
   portENTER_CRITICAL_ISR(&timerMux);
   global_current_interrupts++;
@@ -30,9 +37,8 @@ void IRAM_ATTR timer_interrupt_handler() {
 }
 
 /* 
-Lora setup:
-The band you should use is region specific. In europe we need to use
-868E6, but if you are in a different region you will need to research 
+Lora setup: The band you should use is region specific. In europe we need to
+use 868E6, but if you are in a different region you will need to research
 online what the appropriate band code is. 
 */
 #define BAND    868E6  
@@ -73,7 +79,7 @@ WebServer global_web_server(80);
 
 void logo(){
   Heltec.display->clear();
-  Heltec.display->drawXbm(0,5,logo_width,logo_height,logo_bits);
+  Heltec.display->drawXbm(0,5,splash_width,splash_height,splash_bits);
   Heltec.display->display();
 }
 
@@ -134,65 +140,61 @@ void setup(void) {
   // Set the time
   configTime(9 * 60 * 60, 0, "pt.pool.ntp.org", "time.google.com");
 
-  // Start wireguard
-  // Local keys generated doing:
-  // wg genkey > esp32-privatekey
-  // wg pubkey < esp32-privatekey > esp32-publickey
-  // Public key to copy to the WG server is:
-  // JPXLIEipLp2afY5KQsWseIb477ug7+rmHVwk5nX0QT8=
   Heltec.display->clear();
- /*  
-  Heltec.display->drawString(0, 0, "Setting up Wireguard");
-  Heltec.display->drawString(0, 10, "Claiming 192.168.6.7...");
-  Heltec.display->display();
-
-  wg.begin(
-      local_ip,
-      private_key,
-      remote_ip,
-      public_key,
-      endpoint_port);
- */
+  // I think we can get rid of this
+  // as I think it was part of the implementation I was 
+  // trying to do for wireguard
   if (MDNS.begin("esp32")) {
     Serial.println("MDNS responder started");
   }
 
   // Optional functionalities of EspMQTTClient
-  client.enableDebuggingMessages(); // Enable debugging messages sent to serial output
-  client.enableHTTPWebUpdater(); // Enable the web updater. User and password default to values of MQTTUsername and MQTTPassword. These can be overridded with enableHTTPWebUpdater("user", "password").
-  client.enableOTA(); // Enable OTA (Over The Air) updates. Password defaults to MQTTPassword. Port is the default OTA port. Can be overridden with enableOTA("password", port).
-  client.enableLastWillMessage("TestClient/lastwill", "I am going offline");  // You can activate the retain flag by setting the third parameter to true
+  // Enable debugging messages sent to serial output
+  client.enableDebuggingMessages(); 
+  /* 
+    Enable the web updater. 
+    User and password default to values of MQTTUsername and MQTTPassword. 
+    These can be overridded with enableHTTPWebUpdater("user", "password").
+  */
+  client.enableHTTPWebUpdater(); 
+  /*
+     Enable OTA (Over The Air) updates. 
+     Password defaults to MQTTPassword. 
+     Port is the default OTA port. 
+     Can be overridden with enableOTA("password", port).
+  */
+  client.enableOTA(); 
+  client.enableLastWillMessage(
+    "esp32/lastwill", "Hub going offline..."); 
 
   setupHttpServer();
 
   delay (1000);
   /* Setup for temperature probe */
   pinMode(SENSOR_PIN, INPUT);
-  sensors.begin();    // initialize the temperature sensor  
-  /* Setup for leds */
-  /* Read the ESP32 schematics carefully - some GPIO pins are read only so you cannot set them to output mode. */
+  // initialize the temperature sensor  
+  sensors.begin();    
+  /* Setup for leds
+   Read the ESP32 schematics carefully - some GPIO pins are read only so you
+   cannot set them to output mode. */
   pinMode(INTERNAL_LED_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
   blink();
 }
 
+/* This is a handler for an on-device temperature sensor on the controller. */
 void readTemperature() {
-
- 
       Heltec.display->clear();
       Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
       Heltec.display->setFont(ArialMT_Plain_10);
-      Heltec.display->drawString(0, 30, "GETTEMP Found");
-
+      Heltec.display->drawString(0, 30, "Reading temperature on hub.");
       Serial.println("Reading temperature");
-
       sensors.requestTemperatures();       // send the command to get temperatures
       global_temp_c = sensors.getTempCByIndex(0);  // read temperature i
 
       Serial.print("Temperature: ");
       Serial.print(global_temp_c);    // print the temperature in °C
       Serial.println("°C");  
-
       Serial.println("Sending temp message via LoRa");
       
       LoRa.beginPacket();
