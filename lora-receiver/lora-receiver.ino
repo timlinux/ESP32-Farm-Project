@@ -18,7 +18,7 @@
  *  
  */
 
-String global_message_log[6] = {};
+String global_message_log[6] = {String('a'),String('b'),String('c'),String('d'),String('e'),String('f')};
 
 
 
@@ -94,23 +94,26 @@ void logo(){
 
 
 void showMessages() {
+  Serial.println("Listing messages");
   Heltec.display->clear();
-  for (int i=0; i++; i > 6)
+  for (int i=0; i <= 5; i++)
   {
     Heltec.display->drawString(0, i*10, global_message_log[i]);
+    Serial.print(i);
+    Serial.print(" : ");    
     Serial.println(global_message_log[i]);
   }
   Heltec.display->display();
 }
 
 void addMessage(String message, bool show=false) {
-  for (int i=6; i--; i >= 1)
+  for (int i=5; i >= 1; i--)
   {
     global_message_log[i] = global_message_log[i-1];
-    Serial.println(global_message_log[i]);
   }
   global_message_log[0] = message;
-  if ( show ) showMessages(); 
+  //if ( show ) 
+  showMessages(); 
 }
 
 void setupMessages() {
@@ -233,7 +236,7 @@ void readTemperature() {
       LoRa.endPacket();
       
       addMessage("Temperature ");
-      addMessage( String(global_temp_c) + "°C");  
+      addMessage( String(global_temp_c) + "°C", true);  
 
 }
 
@@ -272,7 +275,7 @@ void setupHttpServer() {
   global_web_server.onNotFound(handleNotFound);
 
   global_web_server.begin();
-  addMessage("HTTP server started");
+  addMessage("HTTP server started", true);
 
 }
 
@@ -286,8 +289,7 @@ void loop(void) {
     // TODO: get rid of this, it is just for debugging
     if (!global_total_interrupts % 1000){
     	addMessage("global_total_interrupts");
-      addMessage(String(global_total_interrupts));
-      showMessages();
+      addMessage(String(global_total_interrupts), true);
     }
   }
 
@@ -332,7 +334,7 @@ void loraDataReceived(){
   if (global_lora_packet.indexOf("TEMP=") > 0) {
     global_lora_packet.replace("TEMP=", "");
     addMessage(global_lora_packet);  
-    addMessage("Tempii");  
+    addMessage("Temp", true);  
 
     // Also publish the received message on MQTT
     // You can activate the retain flag by setting the 
@@ -343,7 +345,7 @@ void loraDataReceived(){
   else if (global_lora_packet.indexOf("STATUS=") > 0) {
     global_lora_packet.replace("STATUS=", "");
     addMessage(global_lora_packet);  
-    addMessage("Status");      
+    addMessage("Status", true);      
     // Also publish the received message on MQTT
     // You can activate the retain flag by setting the 
     // third parameter to true  
@@ -404,7 +406,7 @@ void onConnectionEstablished()
   client.subscribe("esp32/getTemperature",[](const String & topic, const String & payload) {
       
       addMessage("IN:MQTT:esp32/getTemperature");
-      addMessage("OUT:LoRA:GETTEMP");
+      addMessage("OUT:LoRA:GETTEMP", true);
             
       /* First we send out a broadcast asking the remote lora device for its
          status put the radio in idle mode first. */
