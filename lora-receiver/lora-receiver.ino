@@ -11,15 +11,11 @@
 #include <WiFiClient.h>        // For connecting to the local WIFI network
 #include "esp_log.h"           // Check if still used
 #include "secrets.h"           // All passwords etc. should be stored here
-#include "splash.h"          // For displaying a logo on start - edit in GIMP if needed
+#include "splash.h"            // For displaying a logo on start - edit in GIMP if needed
+#include "messages.h"          // For logging recent messages to display on screen
+#include <ESP32-Farm-Project-Library.h> // For constants and device definitions
 
-
-/* For storing last messages sent to the screen.
- *  
- */
-
-String global_message_log[6] = {String('a'),String('b'),String('c'),String('d'),String('e'),String('f')};
-
+#define THIS_DEVICE = DEVICE_MASTER;
 
 
 
@@ -86,51 +82,6 @@ EspMQTTClient client(
 
 WebServer global_web_server(80);
 
-void logo(){
-  Heltec.display->clear();
-  Heltec.display->drawXbm(0,5,splash_width,splash_height,splash_bits);
-  Heltec.display->display();
-}
-
-
-void showMessages() {
-  Serial.println("Listing messages");
-  Heltec.display->clear();
-  for (int i=0; i <= 5; i++)
-  {
-    Heltec.display->drawString(0, i*10, global_message_log[i]);
-    Serial.print(i);
-    Serial.print(" : ");    
-    Serial.println(global_message_log[i]);
-  }
-  Heltec.display->display();
-}
-
-void addMessage(String message, bool show=false) {
-  for (int i=5; i >= 1; i--)
-  {
-    global_message_log[i] = global_message_log[i-1];
-  }
-  global_message_log[0] = message;
-  //if ( show ) 
-  showMessages(); 
-}
-
-void setupMessages() {
-  Heltec.display->init();
-  //Heltec.display->flipScreenVertically(); 
-  Heltec.display->clear();
-  Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-  Heltec.display->setFont(ArialMT_Plain_10);
-  logo();
-  delay(1500);
-  
-  for (int i=0; i++; i > 6)
-  {
-    addMessage(String(' '));
-  }
-}
-
 void setup(void) {
   Serial.begin(115200);
   /* Interrupts setup - we will measure temp every minute **/
@@ -151,6 +102,7 @@ void setup(void) {
     true /*PABOOST Enable*/, 
     BAND /*long BAND*/);
   LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
+  
   setupMessages();
   addMessage("Heltec.LoRa Initial success!");
   addMessage("Setting up device...");
@@ -241,7 +193,9 @@ void readTemperature() {
 }
 
 void handleRoot() {
-  global_web_server.send(200, "text/plain", "Last packet received: " + global_lora_packet);
+  
+  global_web_server.send(
+    200, "application/json" , jsonMessages());
   
   blink();
 }
@@ -421,6 +375,14 @@ void onConnectionEstablished()
       blink();
    
   });  
+
+
+  client.subscribe("esp32/getIP",[](const String & topic, const String & payload) {
+      addMessage("IN:MQTT:esp32/getIP");
+      addMessage("OUT:LoRA:" + WiFi.localIP().toString());
+      client.publish("esp32/ip", WiFi.localIP().toString());
+  });  
+  
 
   // TODO: Decide if we really want wildcard handling here.
   // Subscribe to "mytopic/#" and display received message to Serial
