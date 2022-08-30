@@ -15,9 +15,7 @@
 #include "messages.h"          // For logging recent messages to display on screen
 #include <ESP32-Farm-Project-Library.h> // For constants and device definitions
 
-#define THIS_DEVICE = DEVICE_MASTER;
-
-
+String global_device_name = DEVICE_HUB;
 
 /*
  Interrupt handlers setup
@@ -180,16 +178,10 @@ void readTemperature() {
       sensors.requestTemperatures();       // send the command to get temperatures
       global_temp_c = sensors.getTempCByIndex(0);  // read temperature i
 
-      addMessage("Sending temp message via LoRa");
+      String message = MODE_RESPONSE + SENSOR_TEMPERATURE + global_device_name + String(global_temp_c);
+      client.publish("esp32/temperature", message); 
       
-      LoRa.beginPacket();
-      LoRa.print("INSIDETEMP=");
-      LoRa.print(global_temp_c);
-      LoRa.endPacket();
-      
-      addMessage("Temperature ");
-      addMessage( String(global_temp_c) + "°C", true);  
-
+      addMessage("Temperature " + String(global_temp_c) + "°C", true);  
 }
 
 void handleRoot() {
@@ -338,16 +330,18 @@ void onConnectionEstablished()
      send a LoRA packet to all esp32 devices asking them to return a message
      with their status. */
   client.subscribe("esp32/getValveStatus",[](const String & topic, const String & payload) {
+      // Compose a lora message string:
+      String message = MODE_INSTRUCTION + SENSOR_STATUS + DEVICE_ALL;
       
       addMessage("IN:MQTT:esp32/getStatus");
-      addMessage("OUT:LoRA:GETSTATUS", true);
+      addMessage("OUT:LoRA:" + message, true);
       // Uncomment for debugging 
       // client.publish("esp32", "Processing get status request.");
       
       // Send out a broadcast asking the remote 
       // LoRA devices for their status.
       LoRa.beginPacket();
-      LoRa.print("GETSTATUS");
+      LoRa.print(message);
       LoRa.endPacket();
       // In the main loop we will listen for any response
       // message with STATUS= in it and pass that over to MQTT
@@ -358,15 +352,20 @@ void onConnectionEstablished()
      will send a LoRA packet to all esp32 devices asking them to return a
      message with their temperature if they are able to do that. */
   client.subscribe("esp32/getTemperature",[](const String & topic, const String & payload) {
-      
-      addMessage("IN:MQTT:esp32/getTemperature");
-      addMessage("OUT:LoRA:GETTEMP", true);
+
+      // Compose a lora message string:
+      String message = MODE_INSTRUCTION + SENSOR_TEMPERATURE + DEVICE_ALL;
             
-      /* First we send out a broadcast asking the remote lora device for its
-         status put the radio in idle mode first. */
+      addMessage("esp32/getTemperature");
+      addMessage( message, true);
+            
+      /* Send out a broadcast asking the remote lora device for its temp */
       LoRa.beginPacket();
-      LoRa.print("GETTEMP");
+      LoRa.print(message);
       LoRa.endPacket();
+
+      // Also check temp on the controller device
+      readTemperature();
       
       // In the main loop we will listen for a 
       // message with TEMP= in it and pass that over to MQTT
@@ -378,11 +377,38 @@ void onConnectionEstablished()
 
 
   client.subscribe("esp32/getIP",[](const String & topic, const String & payload) {
-      addMessage("IN:MQTT:esp32/getIP");
-      addMessage("OUT:LoRA:" + WiFi.localIP().toString());
-      client.publish("esp32/ip", WiFi.localIP().toString());
+      // Compose a lora message string:
+      String message = MODE_RESPONSE + SENSOR_IP + DEVICE_ALL;
+
+      /* First we send out a broadcast asking remote lora devices for their IP */
+      LoRa.beginPacket();
+      LoRa.print(message);
+      LoRa.endPacket();
+
+      // Also respond with ip of the hub
+      addMessage("esp32/ip:" + WiFi.localIP().toString());
+      message = MODE_RESPONSE + SENSOR_IP + global_device_name;
+      client.publish("esp32/ip", message + ":" + WiFi.localIP().toString());
   });  
   
+  client.subscribe("esp32/getStatus",[](const String & topic, const String & payload) {
+      // log the request
+      addMessage("esp32/getStatus");
+
+      String message = MODE_RESPONSE + SENSOR_STATUS + DEVICE_ALL;
+
+      /* First we send out a broadcast asking remote lora devices for their IP */
+      LoRa.beginPacket();
+      LoRa.print(message);
+      LoRa.endPacket();
+      
+      // Also respond with status of the hub
+      message = MODE_RESPONSE + SENSOR_STATUS + global_device_name + STATUS_OK;
+      client.publish("esp32/status", message);
+      blink();
+      blink();
+      blink();
+  }); 
 
   // TODO: Decide if we really want wildcard handling here.
   // Subscribe to "mytopic/#" and display received message to Serial
@@ -390,7 +416,8 @@ void onConnectionEstablished()
       addMessage("IN:MQTT:wildcard");
       addMessage(topic);
       addMessage(payload, true);
-      // Three blinks means wildcard message
+      // Four blinks means wildcard message
+      blink();
       blink();
       blink();
       blink();
