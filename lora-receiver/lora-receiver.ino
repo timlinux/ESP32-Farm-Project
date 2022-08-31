@@ -178,7 +178,7 @@ void readTemperature() {
       sensors.requestTemperatures();       // send the command to get temperatures
       global_temp_c = sensors.getTempCByIndex(0);  // read temperature i
 
-      String message = MODE_RESPONSE + SENSOR_TEMPERATURE + global_device_name + String(global_temp_c);
+      String message = MODE_RESPONSE + SENSOR_TEMPERATURE + global_device_name + ':' + String(global_temp_c);
       client.publish("esp32/temperature", message); 
       
       addMessage("Temperature " + String(global_temp_c) + "°C", true);  
@@ -240,7 +240,8 @@ void loop(void) {
   }
 
   if (global_last_interrupts < global_total_interrupts) {
-    readTemperature();
+    //do anything you want to have happen regularly here
+    //readTemperature();
     global_total_interrupts = global_current_interrupts;
   }
 
@@ -277,37 +278,36 @@ void loraDataReceived(){
   addMessage("Received "+ global_lora_packet_size + " bytes");
   addMessage(global_lora_packet);
   addMessage(global_lora_rssi);    
-  if (global_lora_packet.indexOf("TEMP=") > 0) {
-    global_lora_packet.replace("TEMP=", "");
-    addMessage(global_lora_packet);  
-    addMessage("Temp", true);  
-
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true      
-    client.publish("esp32/temperature", global_lora_packet); 
-    delay(1000);
+  if (String(global_lora_packet.charAt(0)) == MODE_RESPONSE)
+  {
+    if (String(global_lora_packet.charAt(1)) == SENSOR_TEMPERATURE) {
+      addMessage("Temp received: " + global_lora_packet, true);  
+  
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true      
+      client.publish("esp32/temperature", global_lora_packet); 
+      // I think we dont need this?
+      //delay(1000);
+    }
+    else if (String(global_lora_packet.charAt(1)) == SENSOR_STATUS) {
+      addMessage("Status received: " + global_lora_packet, true);  
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true  
+      client.publish("esp32/status", global_lora_packet); 
+      // I think we dont need this?
+      //delay(1000);
+    }  
+    else {
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true  
+      addMessage("Other received: " + global_lora_packet, true); ;      
+      client.publish("esp32", global_lora_packet); 
+      delay(1000);
+    }
   }
-  else if (global_lora_packet.indexOf("STATUS=") > 0) {
-    global_lora_packet.replace("STATUS=", "");
-    addMessage(global_lora_packet);  
-    addMessage("Status", true);      
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true  
-    client.publish("esp32/status", global_lora_packet); 
-    delay(1000);
-  }
-  else {
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true  
-    addMessage(global_lora_packet);  
-    addMessage("Other", true);      
-    client.publish("esp32", global_lora_packet); 
-    delay(1000);
-  }
-
 }
 
 void loraCallback(int packet_size) {
@@ -325,28 +325,6 @@ void loraCallback(int packet_size) {
 void onConnectionEstablished()
 {
   addMessage("MQTT...connection established", true);
-
-  /* Subscribe to "esp32/getStatus" on MQTT. If we get this message, we will
-     send a LoRA packet to all esp32 devices asking them to return a message
-     with their status. */
-  client.subscribe("esp32/getValveStatus",[](const String & topic, const String & payload) {
-      // Compose a lora message string:
-      String message = MODE_INSTRUCTION + SENSOR_STATUS + DEVICE_ALL;
-      
-      addMessage("IN:MQTT:esp32/getStatus");
-      addMessage("OUT:LoRA:" + message, true);
-      // Uncomment for debugging 
-      // client.publish("esp32", "Processing get status request.");
-      
-      // Send out a broadcast asking the remote 
-      // LoRA devices for their status.
-      LoRa.beginPacket();
-      LoRa.print(message);
-      LoRa.endPacket();
-      // In the main loop we will listen for any response
-      // message with STATUS= in it and pass that over to MQTT
-      blink();      
-  });
   
   /* Subscribe to "esp32/getTemperature" on MQTT If we get this message, we
      will send a LoRA packet to all esp32 devices asking them to return a
@@ -378,7 +356,7 @@ void onConnectionEstablished()
 
   client.subscribe("esp32/getIP",[](const String & topic, const String & payload) {
       // Compose a lora message string:
-      String message = MODE_RESPONSE + SENSOR_IP + DEVICE_ALL;
+      String message = MODE_INSTRUCTION + SENSOR_IP + DEVICE_ALL;
 
       /* First we send out a broadcast asking remote lora devices for their IP */
       LoRa.beginPacket();
@@ -390,12 +368,17 @@ void onConnectionEstablished()
       message = MODE_RESPONSE + SENSOR_IP + global_device_name;
       client.publish("esp32/ip", message + ":" + WiFi.localIP().toString());
   });  
+
+  
+  /* Subscribe to "esp32/getStatus" on MQTT. If we get this message, we will
+     send a LoRA packet to all esp32 devices asking them to return a message
+     with their status. */
   
   client.subscribe("esp32/getStatus",[](const String & topic, const String & payload) {
       // log the request
       addMessage("esp32/getStatus");
 
-      String message = MODE_RESPONSE + SENSOR_STATUS + DEVICE_ALL;
+      String message = MODE_INSTRUCTION + SENSOR_STATUS + DEVICE_ALL;
 
       /* First we send out a broadcast asking remote lora devices for their IP */
       LoRa.beginPacket();
@@ -403,7 +386,7 @@ void onConnectionEstablished()
       LoRa.endPacket();
       
       // Also respond with status of the hub
-      message = MODE_RESPONSE + SENSOR_STATUS + global_device_name + STATUS_OK;
+      message = MODE_RESPONSE + SENSOR_STATUS + global_device_name + ':' + STATUS_OK;
       client.publish("esp32/status", message);
       blink();
       blink();

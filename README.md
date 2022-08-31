@@ -61,11 +61,13 @@ To start run:
 
 Then install these nodes:
 
-node-red-dashboard
-@studiobox/node-red-contrib-ui-widget-thermometer
-node-red-contrib-chart-image
-node-red-contrib-ui-media
-node-red-contrib-telegrambot
+* node-red-dashboard
+* @studiobox/node-red-contrib-ui-widget-thermometer
+* node-red-contrib-chart-image
+* node-red-contrib-ui-media
+* node-red-contrib-telegrambot
+* node-red-contrib-ui-led
+* node-red-node-sqlite
 
 
 For charts to render I had to install these:

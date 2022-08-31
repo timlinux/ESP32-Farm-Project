@@ -1,42 +1,21 @@
 [
     {
-        "id": "a1e0b98575deac8b",
-        "type": "ui_widget_thermometer",
-        "z": "2720c9c3986d8e43",
-        "group": "d513e413229d2d64",
-        "order": 4,
-        "width": 6,
-        "height": 5,
-        "name": "Temperature",
-        "title": "Temperature",
-        "colorTop": "#2196f3",
-        "colorMiddle": "#8bc34a",
-        "colorBottom": "#f44336",
-        "unit": "°C",
-        "scale": "normal",
-        "minTemp": "-5",
-        "maxTemp": "50",
-        "x": 1050,
-        "y": 400,
-        "wires": []
-    },
-    {
-        "id": "d513e413229d2d64",
-        "type": "ui_group",
-        "name": "ESP32",
-        "tab": "ef3275ed2ca9fd6f",
-        "order": 1,
-        "disp": true,
-        "width": 26,
-        "collapse": false,
-        "className": ""
-    },
-    {
-        "id": "ef3275ed2ca9fd6f",
-        "type": "ui_tab",
-        "name": "ESP32",
-        "icon": "dashboard",
-        "disabled": false,
-        "hidden": false
+        "id": "b8bcb0ba94eb28d2",
+        "type": "function",
+        "z": "5c2ad4a20d250b77",
+        "name": "Line Chart",
+        "func": "// Create the chart object\nlet m = {\n    type: 'line',\n    options: {\n        title: {\n            display:true,\n            text:'Pumphouse Temperatures'\n        },\n        legend: {\n            display:false\n        },\n        chartArea: {\n            backgroundColor: 'white'\n        },\n        plugins: {\n            datalabels: {\n                display:true,\n                backgroundColor:'whitesmoke',\n                borderRadius:1,\n                padding:1,\n                align: 'right',\n                anchor: function(context) {\n                    if (context.dataIndex == context.dataset.data.length - 1) {\n                        return 'center';\n                    } else {\n                        return 'end';\n                    }\n                },\n                offset:8,\n                formatter:function(value) {\n                    return value > 0 ? value.toLocaleString() : '';\n                }\n            }\n        }\n    },\n    data: {\n        labels:[],\n        datasets: [\n            {\n                label:\"Pumphouse Temperatures\",\n                borderColor:'rgba(57,97,184,0.8)',\n                fill:false,\n                data: msg.payload\n            }\n        ]\n    }\n}\n\n\nmsg.payload = m;\n\nreturn msg;\n",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1070,
+        "y": 360,
+        "wires": [
+            [
+                "e98164b7e68e1355"
+            ]
+        ]
     }
 ]
