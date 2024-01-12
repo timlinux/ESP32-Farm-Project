@@ -11,7 +11,11 @@
 #include <WiFiClient.h>        // For connecting to the local WIFI network
 #include "esp_log.h"           // Check if still used
 #include "secrets.h"           // All passwords etc. should be stored here
-#include "splash.h"          // For displaying a logo on start - edit in GIMP if needed
+#include "splash.h"            // For displaying a logo on start - edit in GIMP if needed
+#include "messages.h"          // For logging recent messages to display on screen
+#include <ESP32-Farm-Project-Library.h> // For constants and device definitions
+
+String global_device_name = DEVICE_HUB;
 
 /*
  Interrupt handlers setup
@@ -76,14 +80,8 @@ EspMQTTClient client(
 
 WebServer global_web_server(80);
 
-void logo(){
-  Heltec.display->clear();
-  Heltec.display->drawXbm(0,5,splash_width,splash_height,splash_bits);
-  Heltec.display->display();
-}
-
 void setup(void) {
-
+  Serial.begin(115200);
   /* Interrupts setup - we will measure temp every minute **/
   // Configure Prescaler to 80, as our timer runs @ 80Mhz
   // Giving an output of 80,000,000 / 80 = 1,000,000 ticks / second
@@ -102,44 +100,37 @@ void setup(void) {
     true /*PABOOST Enable*/, 
     BAND /*long BAND*/);
   LoRa.setTxPower(14,RF_PACONFIG_PASELECT_PABOOST);
-  Heltec.display->init();
-  //Heltec.display->flipScreenVertically();  
-  Heltec.display->setFont(ArialMT_Plain_10);
-  logo();
-  delay(1500);
-  Heltec.display->clear();
-  Heltec.display->drawString(0, 0, "Heltec.LoRa Initial success!");
-  Heltec.display->drawString(0, 10, "Setting up device...");
-  Heltec.display->display();
+  
+  setupMessages();
+  addMessage("Heltec.LoRa Initial success!");
+  addMessage("Setting up device...");
+  
   delay(1000);
   
   digitalWrite(INTERNAL_LED_PIN, 0);
-  Serial.begin(115200);
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifi_ssid, wifi_password);
-  Heltec.display->drawString(0, 20, "Connecting to wifi...");
-  Heltec.display->display();
+  addMessage("Connecting to wifi...", true);
+  
   // Wait for connection
   int attempt = 0;
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Heltec.display->clear();
-    Heltec.display->drawString(0, 10, wifi_ssid);
-    Heltec.display->drawString(0, 20, wifi_password);
-    Heltec.display->drawString(0, 40, String(attempt));
-    Heltec.display->display();
+    addMessage(wifi_ssid);
+    addMessage(wifi_password);
+    addMessage(String(attempt), true);
     attempt += 1;
   }
-  Heltec.display->clear();
-  Heltec.display->drawString(0, 0, "Connected...");
-  Heltec.display->drawString(0, 10, wifi_ssid);
-  Heltec.display->drawString(0, 20, WiFi.localIP().toString().c_str());
-  Heltec.display->display();
+  
+  addMessage("Connected...");
+  addMessage(wifi_ssid);
+  addMessage(WiFi.localIP().toString().c_str(), true);
+  
 
   // Set the time
   configTime(9 * 60 * 60, 0, "pt.pool.ntp.org", "time.google.com");
 
-  Heltec.display->clear();
   // I think we can get rid of this
   // as I think it was part of the implementation I was 
   // trying to do for wireguard
@@ -183,32 +174,20 @@ void setup(void) {
 
 /* This is a handler for an on-device temperature sensor on the controller. */
 void readTemperature() {
-      Heltec.display->clear();
-      Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-      Heltec.display->setFont(ArialMT_Plain_10);
-      Heltec.display->drawString(0, 30, "Reading temperature on hub.");
-      Serial.println("Reading temperature");
+      addMessage("Reading temperature on hub.");
       sensors.requestTemperatures();       // send the command to get temperatures
       global_temp_c = sensors.getTempCByIndex(0);  // read temperature i
 
-      Serial.print("Temperature: ");
-      Serial.print(global_temp_c);    // print the temperature in °C
-      Serial.println("°C");  
-      Serial.println("Sending temp message via LoRa");
+      String message = MODE_RESPONSE + SENSOR_TEMPERATURE + global_device_name + ':' + String(global_temp_c);
+      client.publish("esp32/temperature", message); 
       
-      LoRa.beginPacket();
-      LoRa.print("INSIDETEMP=");
-      LoRa.print(global_temp_c);
-      LoRa.endPacket();
-      
-      Heltec.display->drawString(0, 30 , "Temperature ");
-      Heltec.display->drawString(0, 40, String(global_temp_c) + "°C");  
-      Heltec.display->display();
-  
+      addMessage("Temperature " + String(global_temp_c) + "°C", true);  
 }
 
 void handleRoot() {
-  global_web_server.send(200, "text/plain", "Last packet received: " + global_lora_packet);
+  
+  global_web_server.send(
+    200, "application/json" , jsonMessages());
   
   blink();
 }
@@ -242,7 +221,7 @@ void setupHttpServer() {
   global_web_server.onNotFound(handleNotFound);
 
   global_web_server.begin();
-  Serial.println("HTTP server started");
+  addMessage("HTTP server started", true);
 
 }
 
@@ -255,13 +234,14 @@ void loop(void) {
     global_total_interrupts++;
     // TODO: get rid of this, it is just for debugging
     if (!global_total_interrupts % 1000){
-    	Serial.print("global_total_interrupts");
-    	Serial.println(global_total_interrupts);
+    	addMessage("global_total_interrupts");
+      addMessage(String(global_total_interrupts), true);
     }
   }
 
   if (global_last_interrupts < global_total_interrupts) {
-    readTemperature();
+    //do anything you want to have happen regularly here
+    //readTemperature();
     global_total_interrupts = global_current_interrupts;
   }
 
@@ -295,44 +275,39 @@ void blink()
 }
 
 void loraDataReceived(){
-  Heltec.display->clear();
-  Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
-  Heltec.display->setFont(ArialMT_Plain_10);
-  Heltec.display->drawString(0 , 10 , "Received "+ global_lora_packet_size + " bytes");
-  Heltec.display->drawStringMaxWidth(0 , 20 , 128, global_lora_packet);
-  Heltec.display->drawString(0, 30, global_lora_rssi);    
-  if (global_lora_packet.indexOf("TEMP=") > 0) {
-    global_lora_packet.replace("TEMP=", "");
-    Heltec.display->drawString(0, 40, global_lora_packet);  
-    Heltec.display->drawString(0, 50, "Tempii");  
-
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true      
-    client.publish("esp32/temperature", global_lora_packet); 
-    delay(1000);
+  addMessage("Received "+ global_lora_packet_size + " bytes");
+  addMessage(global_lora_packet);
+  addMessage(global_lora_rssi);    
+  if (String(global_lora_packet.charAt(0)) == MODE_RESPONSE)
+  {
+    if (String(global_lora_packet.charAt(1)) == SENSOR_TEMPERATURE) {
+      addMessage("Temp received: " + global_lora_packet, true);  
+  
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true      
+      client.publish("esp32/temperature", global_lora_packet); 
+      // I think we dont need this?
+      //delay(1000);
+    }
+    else if (String(global_lora_packet.charAt(1)) == SENSOR_STATUS) {
+      addMessage("Status received: " + global_lora_packet, true);  
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true  
+      client.publish("esp32/status", global_lora_packet); 
+      // I think we dont need this?
+      //delay(1000);
+    }  
+    else {
+      // Also publish the received message on MQTT
+      // You can activate the retain flag by setting the 
+      // third parameter to true  
+      addMessage("Other received: " + global_lora_packet, true); ;      
+      client.publish("esp32", global_lora_packet); 
+      delay(1000);
+    }
   }
-  else if (global_lora_packet.indexOf("STATUS=") > 0) {
-    global_lora_packet.replace("STATUS=", "");
-    Heltec.display->drawString(0, 40, global_lora_packet);  
-    Heltec.display->drawString(0, 50, "Status");      
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true  
-    client.publish("esp32/status", global_lora_packet); 
-    delay(1000);
-  }
-  else {
-    // Also publish the received message on MQTT
-    // You can activate the retain flag by setting the 
-    // third parameter to true  
-    Heltec.display->drawString(0, 40, global_lora_packet);  
-    Heltec.display->drawString(0, 50, "Other");      
-    client.publish("esp32", global_lora_packet); 
-    delay(1000);
-  }
-
-  Heltec.display->display();
 }
 
 void loraCallback(int packet_size) {
@@ -349,45 +324,26 @@ void loraCallback(int packet_size) {
 // WARNING : YOU MUST IMPLEMENT IT IF YOU USE EspMQTTClient
 void onConnectionEstablished()
 {
-  Heltec.display->clear();
-  Heltec.display->drawString(0, 0, "MQTT...connection established");
-  Heltec.display->display();
-
-  /* Subscribe to "esp32/getStatus" on MQTT. If we get this message, we will
-     send a LoRA packet to all esp32 devices asking them to return a message
-     with their status. */
-  client.subscribe("esp32/getValveStatus",[](const String & topic, const String & payload) {
-      Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "IN:MQTT:esp32/getStatus");
-      Heltec.display->drawString(0, 10, "OUT:LoRA:GETSTATUS");
-      Heltec.display->display();   
-      // Uncomment for debugging 
-      // client.publish("esp32", "Processing get status request.");
-      
-      // Send out a broadcast asking the remote 
-      // LoRA devices for their status.
-      LoRa.beginPacket();
-      LoRa.print("GETSTATUS");
-      LoRa.endPacket();
-      // In the main loop we will listen for any response
-      // message with STATUS= in it and pass that over to MQTT
-      blink();      
-  });
+  addMessage("MQTT...connection established", true);
   
   /* Subscribe to "esp32/getTemperature" on MQTT If we get this message, we
      will send a LoRA packet to all esp32 devices asking them to return a
      message with their temperature if they are able to do that. */
   client.subscribe("esp32/getTemperature",[](const String & topic, const String & payload) {
-      Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "IN:MQTT:esp32/getTemperature");
-      Heltec.display->drawString(0, 10, "OUT:LoRA:GETTEMP");
-      Heltec.display->display();    
-      
-      /* First we send out a broadcast asking the remote lora device for its
-         status put the radio in idle mode first. */
+
+      // Compose a lora message string:
+      String message = MODE_INSTRUCTION + SENSOR_TEMPERATURE + DEVICE_ALL;
+            
+      addMessage("esp32/getTemperature");
+      addMessage( message, true);
+            
+      /* Send out a broadcast asking the remote lora device for its temp */
       LoRa.beginPacket();
-      LoRa.print("GETTEMP");
+      LoRa.print(message);
       LoRa.endPacket();
+
+      // Also check temp on the controller device
+      readTemperature();
       
       // In the main loop we will listen for a 
       // message with TEMP= in it and pass that over to MQTT
@@ -397,15 +353,54 @@ void onConnectionEstablished()
    
   });  
 
+
+  client.subscribe("esp32/getIP",[](const String & topic, const String & payload) {
+      // Compose a lora message string:
+      String message = MODE_INSTRUCTION + SENSOR_IP + DEVICE_ALL;
+
+      /* First we send out a broadcast asking remote lora devices for their IP */
+      LoRa.beginPacket();
+      LoRa.print(message);
+      LoRa.endPacket();
+
+      // Also respond with ip of the hub
+      addMessage("esp32/ip:" + WiFi.localIP().toString());
+      message = MODE_RESPONSE + SENSOR_IP + global_device_name;
+      client.publish("esp32/ip", message + ":" + WiFi.localIP().toString());
+  });  
+
+  
+  /* Subscribe to "esp32/getStatus" on MQTT. If we get this message, we will
+     send a LoRA packet to all esp32 devices asking them to return a message
+     with their status. */
+  
+  client.subscribe("esp32/getStatus",[](const String & topic, const String & payload) {
+      // log the request
+      addMessage("esp32/getStatus");
+
+      String message = MODE_INSTRUCTION + SENSOR_STATUS + DEVICE_ALL;
+
+      /* First we send out a broadcast asking remote lora devices for their IP */
+      LoRa.beginPacket();
+      LoRa.print(message);
+      LoRa.endPacket();
+      
+      // Also respond with status of the hub
+      message = MODE_RESPONSE + SENSOR_STATUS + global_device_name + ':' + STATUS_OK;
+      client.publish("esp32/status", message);
+      blink();
+      blink();
+      blink();
+  }); 
+
   // TODO: Decide if we really want wildcard handling here.
   // Subscribe to "mytopic/#" and display received message to Serial
   client.subscribe("esp32/wildcard/#", [](const String & topic, const String & payload) {
-      Heltec.display->clear();
-      Heltec.display->drawString(0, 0, "IN:MQTT:wildcard");
-      Heltec.display->drawString(0, 10, topic);
-      Heltec.display->drawString(0, 20, payload);
-      Heltec.display->display();
-      // Three blinks means wildcard message
+      addMessage("IN:MQTT:wildcard");
+      addMessage(topic);
+      addMessage(payload, true);
+      // Four blinks means wildcard message
+      blink();
       blink();
       blink();
       blink();

@@ -55,25 +55,42 @@ sudo n stable
 
 (Above steps from https://askubuntu.com/a/480642)
 
+For charts sent to telegram to render I had to install these:
+
+> sudo apt-get install build-essential libcairo2-dev \
+> libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+> npm install canvas
+> npm install date-fns chartjs-adapter-date-fns --save
+
+See https://discourse.nodered.org/t/solved-using-node-red-contrib-chart-image/35300/7
+
 To start run:
 
 > node-red
 
+Press ctrl-c again to stop it and edit .node-red/settings.js that was created in your
+home dir. Find the functionGlobalContext section and add the chartJsDateAdapter as below
+
+```
+    functionGlobalContext: {
+        // Added by Tim for chart-image node to use date adapter
+        chartjsDateAdapter: require('chartjs-adapter-date-fns'),
+        // os:require('os'),
+    },
+```
+
+
 Then install these nodes:
 
-node-red-dashboard
-@studiobox/node-red-contrib-ui-widget-thermometer
-node-red-contrib-chart-image
-node-red-contrib-ui-media
-node-red-contrib-telegrambot
+* node-red-dashboard
+* @studiobox/node-red-contrib-ui-widget-thermometer
+* node-red-contrib-chart-image
+* node-red-contrib-ui-media
+* node-red-contrib-telegrambot
+* node-red-contrib-ui-led
+* node-red-node-sqlite
+* node-red-contrib-secret
 
-
-For charts to render I had to install these:
-
-> sudo apt-get install build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
-> npm install canvas
-
-See https://discourse.nodered.org/t/solved-using-node-red-contrib-chart-image/35300/7
 
 ## Mosquitto MQTT server
 
