@@ -179,7 +179,11 @@ Basically follow notes to your board setup - in my case https://heltec-automatio
 Then install all the libraries needed - usually you can just search for the library after you get a compile error.
 
 
+Then cd into your library folder and check out the companion library:
 
+```
+git clone git@github.com:timlinux/ESP32-Farm-Project-Library.git
+```
 
 
 -----
